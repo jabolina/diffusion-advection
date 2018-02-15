@@ -30,24 +30,25 @@ module functions_module
 
       integer:: i, j
 
-      do i=0, n
-        do j=0, n
-          f(i, j) = analytic_solution((j*h), (i*h), 0.0d0)
+      do i=1, n
+        do j=1, n
+          f(i, j) = analytic_solution(((j-1)*h), ((i-1)*h), 0.0d0)
         end do
       end do
 
       return
     end subroutine initial_value
 
-    subroutine save_numeric(nu, n)
+    subroutine save_numeric(nu, n, h)
       real *8, allocatable, intent(in):: nu(:,:)
+      real *8, intent(in):: h
       integer, intent(in):: n
 
       integer:: i, j
       
-      do i=0, n
-        do j=0, n
-          write (2,*) i, j, nu(i, j)
+      do i=1, n
+        do j=1, n
+          write (2,*) (i-1)*h, (j-1)*h, nu(i, j)
         end do
       end do
       
@@ -65,64 +66,66 @@ module functions_module
       real *8:: ua, ub
       integer:: i, j
 
-      allocate(z(0:n, 0:n))
+      allocate(z(1:n, 1:n))
 
-      do j=0, n
-        do i=0, n
+      do j=1, n
+        do i=1, n
           z(i, j) = 0.0d0
         end do
       end do
 
-      do j=1, n-1
-        allocate(a(1:n-1), b(1:n-1), c(1:n-1), r(1:n-1), x(1:n-1))
+      do j=2, n-1
+        allocate(a(1:n), b(1:n), c(1:n), r(1:n), x(1:n))
 
         do i=1, n-1
-          a(i) = -(p+s)
-          b(i) = (1.0d0 + 2.0d0*s)
-          c(i) = (p-s)
-          r(i) = ((p+s)*nu(i, j-1)) + ((1.0d0 - 2.0d0*s)*nu(i, j)) + ((s-p)*nu(i, j+1))
+          a(i) = -(p + .5d0*s)
+          b(i) = (1.0d0 + s)
+          c(i) = (p - .5d0*s)
         end do
 
-        ua = ((p+s)*nu(0, j-1)) + ((1.0d0 - 2.0d0*s)*nu(0, j)) + ((s-p)*nu(0, j+1))
-        ub = ((p+s)*nu(n, j-1)) + ((1.0d0 - 2.0d0*s)*nu(n, j)) + ((s-p)*nu(n, j+1))
+        ua = nu(1, j) - (p+.5d0*s)*nu(1,j-1) + s*nu(1, j) - (.5d0*s-p)*nu(1, j+1)
+        r(1)   = r(1) - a(1)*ua
+        do i=2, n-1
+          r(i) = ((p+.5d0*s)*nu(i, j-1)) + ((1.0d0 - s)*nu(i, j)) + ((.5d0*s-p)*nu(i, j+1))
+        end do
+        ub = nu(n, j) - (p+.5d0*s)*nu(n,j-1) + s*nu(n, j) - (.5d0*s-p)*nu(n, j+1)
+        r(n) = r(n) - c(n)*ub 
+        
+        call thomas_algorithm(a, b, c, r, x, 2, n-1)
 
-        r(1) = r(1) - a(1)*ua
-        r(n-1) = r(n-1) - c(n-1)*ub
-
-        call thomas_algorithm(a, b, c, r, x, 1, n-1)
-
-        z(0, j) = 0.0d0
-        do i=1, n-1
+!        z(1, j) = 0.0d0
+        do i=1, n
           z(i, j) = x(i)
         end do
-        z(n, j) = 0.0d0
+!        z(n, j) = 0.0d0
 
         deallocate(a, b, c, r, x)
       end do
 
-      do i=1, n-1
-        allocate(a(1:n-1), b(1:n-1), c(1:n-1), r(1:n-1), x(1:n-1))
+      do i=2, n-1
+        allocate(a(1:n), b(1:n), c(1:n), r(1:n), x(1:n))
 
         do j=1, n-1
-          a(j) = -(q+s)
-          b(j) = (1.0d0 + 2.0d0*s)
-          c(j) = (q-s)
-          r(j) = ((q+s)*z(i-1, j)) + ((1.0d0 - 2.0d0*s)*z(i, j)) + ((s-q)*z(i+1, j))
+          a(j) = -(q + .5d0*s)
+          b(j) = (1.0d0 + s)
+          c(j) = (q - .5d0*s)
         end do
 
-        ua = ((q+s)*nu(i-1, 0)) + ((1.0d0 - 2.0d0*s)*nu(i, 0)) + ((q-p)*nu(i+1, 0))
-        ub = ((q+s)*nu(i-1, n)) + ((1.0d0 - 2.0d0*s)*nu(i, n)) + ((q-p)*nu(i+1, n))
-
+        ua = nu(i, 1) - (q+.5d0*s)*nu(i-1, 1) + s*nu(i, 1) - (.5d0*s-q)*nu(i+1, 1)
         r(1) = r(1) - a(1)*ua
-        r(n-1) = r(n-1) - c(n-1)*ub
+        do j=2, n-1
+          r(j) = ((q+.5d0*s)*z(i-1, j)) + ((1.0d0 - s)*z(i, j)) + ((.5d0*s-q)*z(i+1, j))
+        end do
+        ub = nu(i, n) - (q+.5d0*s)*nu(i-1, n) + s*nu(i, n) - (.5d0*s-q)*nu(i+1, n)
+        r(n-1) = r(n-1) + c(n-1)*ub
 
-        call thomas_algorithm(a, b, c, r, x, 1, n-1)
+        call thomas_algorithm(a, b, c, r, x, 2, n-1)
 
-        nu(i, 0) = 0.0d0
-        do j=1, n-1
+!        nu(i, 1) = 0.0d0
+        do j=1, n
           nu(i, j) = x(j)
         end do
-        nu(i, n) = 0.0d0
+!        nu(i, n) = 0.0d0
 
         deallocate(a, b, c, r, x)
       end do
@@ -142,30 +145,29 @@ program diffusion
   real *8, allocatable:: nu(:,:)
 
   l = 1.0d0
-  st = 100
+  st = 125
   
   open(unit=2, file="numeric.dat")
-  do o=2, 6
-    n = 2 ** o
-    d = l / (dfloat(n))
-    u = 1.0d0
-    v = 1.0d0
-    dt = 0.0001d0
-    s = dt / (2.0d0 * (d * d))
-    p = (u*dt)/(4.0d0*d)
-    q = (v*dt)/(4.0d0*d)
+  n = 2 ** 5
+  d = l / (n-1)
+  pe = 7.0d0
+  u = 0.0d0
+  v = 0.0d0
+  dt = 0.001d0
+  s = dt / (d * d)
+  p = (pe*u*dt)/(4.0d0*d)
+  q = (pe*v*dt)/(4.0d0*d)
 
-    allocate(nu(0:n, 0:n))
+  allocate(nu(1:n, 1:n))
+  call initial_value(nu, n, d)
 
-    call initial_value(nu, n, d)
+  do k=1, st-1
+    call save_numeric(nu, n, d)
 
-    do k=1, st-1
-      call save_numeric(nu, n)
-
-      call crank_nicolson(nu, n, s, p, q)
-    end do
-    deallocate(nu)
+    call crank_nicolson(nu, n, s, p, q)
   end do
+
+  deallocate(nu)
   close(2)
 
 end program diffusion
@@ -178,3 +180,4 @@ real *8 function analytic_solution(x, y, t)
 
   analytic_solution = SIN(pi*x) * SIN(pi*y) * EXP(-2.0d0*(pi*pi)*t)
 end function analytic_solution
+
